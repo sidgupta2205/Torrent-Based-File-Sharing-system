@@ -2,9 +2,63 @@
 
 using namespace std;
 
+void copy(string,string);
+
+
+void deleteDir(string dirName)
+{
+	DIR *di;
+	struct dirent *diren;
+
+	if(!(di = opendir(dirName.c_str()))){
+		cout<<"Can't open the directory";
+		return;
+	}
+
+	while((diren = readdir(di))){
+		string dname =  string(diren->d_name);
+		if( (dname == ".") || (dname == "..") ){
+				continue;
+		}
+
+		deleteFile(dirName+"/"+dname);
+	}
+	closedir(di);
+	return;
+}
+
 int deleteFile(string file)
 {
-	return unlink(file.c_str());
+	struct stat fileInfo;
+	lstat(file.c_str(),fileInfo);
+	if(S_ISDIR(fileInfo.st_mode))
+	{
+		deleteDir(file);
+		rmdir(file.c_str());
+	}
+	else
+	{
+		return unlink(file.c_str());
+	}
+
+}
+
+bool create_dir(string name,string dest)
+{
+	string full = dest+"/"+name;
+	
+	try
+	{
+		mkdir(full.c_str(),S_IRUSR|S_IWUSR|S_IXUSR);
+		return true;
+	}
+	catch(exception &e)
+	{
+		return false;
+	}
+	
+	return false;
+
 }
 
 int renameFile(string file,string nr)
@@ -12,7 +66,7 @@ int renameFile(string file,string nr)
 	return rename(file.c_str(),nr.c_str());
 }
 
-int searchFile(string curr_dir,string name)
+bool searchFile(string curr_dir,string name)
 {
 	// add current directory in queue
 	queue<string> qt;
@@ -38,7 +92,7 @@ int searchFile(string curr_dir,string name)
 	            	if(S_ISDIR(binfo.st_mode))
 	            		if(!(stname==".." or stname=="."))
 	            		{
-	            			cout<<"adding this directory "<<stname<<endl;
+	            			//cout<<"adding this directory "<<stname<<endl;
 	            			qt.push(stname);
 	            		}
 	            }
@@ -82,18 +136,58 @@ int copy_file(string src,string dest)
 	while((n=read(fd1,buf,buffer_size))>0)
 		if(write(fd2,buf,n)!=n)
 		{
-			cout<<strerror(errno);
+			//cout<<strerror(errno);
 			return 0;
 		}
 	if(n<0)
 	{
-		cout<<strerror(errno);
+		//cout<<strerror(errno);
 		return 0;
 	}
 	close(fd1);
 	close(fd2);
 
 	return 1;
+
+}
+
+void copy_dir_helper(string dirName, string destination){
+
+	DIR *di;
+	struct dirent *diren;
+	struct stat fileInfo;
+
+	if(!(di = opendir(dirName.c_str()))){
+		cout<<"Can't open the directory";
+		return;
+	}
+
+	while((diren = readdir(di))){
+		string dname =  string(diren->d_name);
+		if( (dname == ".") || (dname == "..") ){
+				continue;
+		}
+
+		copy(dname,destination);
+	}
+	closedir(di);
+	return;
+}
+
+void copy(string src,string dest)
+{
+
+	struct stat fileInfo;
+	lstat(src.c_str(),&fileInfo);
+	if(S_ISDIR(fileInfo.st_mode))
+	{
+		create_dir(src,dest);
+		copy_dir_helper(src,dest+"/"+src);
+	}
+	else
+	{
+		copy_file(src,dest);
+	}
 
 }
 
