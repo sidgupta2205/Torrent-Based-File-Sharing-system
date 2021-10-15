@@ -40,7 +40,10 @@ int deleteFile(string file)
 	}
 	else
 	{
-		return unlink(file.c_str());
+		if(unlink(file.c_str())==0)
+			return 1;
+		else
+			return 0;
 	}
 
 	return 0;
@@ -107,12 +110,12 @@ bool searchFile(string curr_dir,string name)
 	            else
 	            {
 	            	string stname = string(diread->d_name);
-	            	lstat(diread->d_name,&binfo);
+	            	lstat((tmp+"/"+string(diread->d_name)).c_str(),&binfo);
 	            	if(S_ISDIR(binfo.st_mode))
 	            		if(!(stname==".." or stname=="."))
 	            		{
 	            			//cout<<"adding this directory "<<stname<<endl;
-	            			qt.push(stname);
+	            			qt.push(tmp+"/"+string(diread->d_name));
 	            		}
 	            }
 	        }

@@ -80,9 +80,10 @@ void moveWithout(int r,int col)
 
 void displayResult(string str)
 {
-    moveCursor(cmdr-2,0);
+    int tmp = cursor;
+    moveWithout(cmdr-2,0);
     cout<<str;
-    moveCursor(cmdr,0);
+    moveWithout(tmp,0);
 }
 
 
@@ -214,7 +215,9 @@ void printfileofdirs(string tmp)
     struct stat bin;
     lstat(tmp.c_str(),&bin);
     if(!(S_ISDIR(bin.st_mode)))
+    {
         return;
+    }
     files.clear();
     toprint.clear();
     DIR *dir;
@@ -380,20 +383,41 @@ void moveToBack()
 
 void enter()
 {
-    
-    cout<<clr;
-    //cout<<files[posc-1]<<endl;
-    if(string(files[posc-1])==".")
+
+    struct stat fileInfo;
+    //displayResult(toprint[posc-1]);
+    string filename = createAbs(toprint[posc-1]);
+    lstat(filename.c_str(),&fileInfo);
+
+    if(S_ISDIR(fileInfo.st_mode))
     {
-        //cout<<"this is the same place"<<endl;
-        printfileofdirs(getcurrstring());
-        return;
+
+            cout<<clr;
+            displayResult("Directory");
+        //cout<<files[posc-1]<<endl;
+        if(string(files[posc-1])==".")
+        {
+            //cout<<"this is the same place"<<endl;
+            printfileofdirs(getcurrstring());
+            return;
+        }
+        if(string(files[posc-1])=="..") 
+            movetoparent(); 
+        else
+            movetodir(string(files[posc-1]));
+        moveCursor(1,0);
+
     }
-    if(string(files[posc-1])=="..") 
-        movetoparent(); 
     else
-        movetodir(string(files[posc-1]));
-    moveCursor(1,0);
+    {
+        pid_t pid=fork();
+        if(pid==0){
+            displayResult("File opened in default editor");
+            execl("/usr/bin/xdg-open","xdg-open",filename.c_str(),NULL);
+            exit(1);
+        }
+    }
+
 }
 
 void processCmds(string roll)
@@ -407,7 +431,10 @@ void processCmds(string roll)
         string dest = cmds[cmds.size()-1];
         for(int i=1;i<cmds.size()-1;i++)
         {
-            copy(cmds[i],dest);
+            if(copy(createAbs(cmds[i]),createAbs(dest)))
+                displayResult("copy Success");
+            else
+                displayResult("copy failed");
         }
         
     }
@@ -418,25 +445,46 @@ void processCmds(string roll)
         for(int i=1;i<cmds.size()-1;i++)
         {
             if(copy(createAbs(cmds[i]),createAbs(dest)))
-                deleteFile(createAbs(cmds[i]));
+            {
+                if(deleteFile(createAbs(cmds[i])))
+                {
+                    displayResult("Moved");
+
+                }
+                else
+                {
+                    displayResult("unable to move FIle");
+                }
+            }
+            else
+            {
+                displayResult("unable to move File");
+            }
         }
 
     }
 
-    else if(cmd=="delete")
+    else if(cmd=="delete" || cmd=="delete_dir" || cmd=="delete_file")
     {
         for(int i=1;i<cmds.size();i++)
         {
             if(cmds[i]==getcurrstring())
                 return;
-            deleteFile(cmds[i]);
+            if(deleteFile(createAbs(cmds[i])))
+                displayResult("Deleted Success");
+            else
+                displayResult("Error in deletion");
+
         }
         
     }
 
     else if(cmd=="rename")
     {
-        renameFile(cmds[1],cmds[2]);
+        if(renameFile(cmds[1],cmds[2])==0)
+            displayResult("Successfully renamed");
+        else
+            displayResult("rename failed");
     }
     else if(cmd=="goto")
     {
