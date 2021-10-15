@@ -2,29 +2,81 @@
 #include "cmdFunctions.h"
 using namespace std;
 
+
 string getcurrstring();
+string createAbs(string);
+void display();
+void moveCursor(int,int);
+void moveWithout(int,int);
 struct termios original;
 struct winsize w;
 int rowsize;
 int colsize;
-int posc=0;
+int len;
+int posc=1;
+int cursor;
 int cmdr;
+int top = 0;
+int bottom=0;
 int currpos;
+int mode=1;
 unsigned int originval;
 vector<char *> files;
+vector<string>toprint;
 vector<string> curr; // Holds curr directory path 
 vector<string>cmds;
 stack<string>back;
 stack<string>front;
 // changing terminal mode to noncanonical
 
+
+
+void printmodeLine()
+{
+    int temp = cursor;
+    if(mode==1)
+    {
+        
+        moveWithout(cmdr-1,0);
+        cout<<clrline;
+        cout<<"------NORMAL MODE ACTIVATED-------";
+
+    }
+    else
+    {
+        moveWithout(cmdr-1,0);
+        cout<<clrline;
+        cout<<"------COMMAND MODE ACTIVATED-------";
+
+    }
+
+    moveWithout(temp,0);
+
+    return;
+}
+
+string createAbs(string pathd)
+{
+    if(pathd[0]=='/')
+        return pathd;
+    else
+        return getcurrstring()+"/"+pathd;
+}
+
 void moveCursor(int r,int col)
 {
     posc = r;
+    cursor = r;
     cout<<"\033["<<r<<";"<<col<<"H";
     fflush(stdout);
 }
 
+void moveWithout(int r,int col)
+{
+    cursor = r;
+    cout<<"\033["<<r<<";"<<col<<"H";
+    fflush(stdout);   
+}
 
 void displayResult(string str)
 {
@@ -32,6 +84,7 @@ void displayResult(string str)
     cout<<str;
     moveCursor(cmdr,0);
 }
+
 
 void setNonCanonicalMode()
 {
@@ -90,13 +143,14 @@ void setWindowParams()
     rowsize=w.ws_row;
     colsize=w.ws_col;
     cmdr = rowsize-5;
+    rowsize =cmdr-3;
 }
 //intializing welcome screen
 void initialize()
 {
 	setNonCanonicalMode();
     setWindowParams();
-    currpos=0;
+    mode=1;
 }
 
 string getpermissions(struct stat fileInfo)
@@ -162,14 +216,15 @@ void printfileofdirs(string tmp)
     if(!(S_ISDIR(bin.st_mode)))
         return;
     files.clear();
+    toprint.clear();
     DIR *dir;
     struct dirent *diread;
     vector<int> file_size;
-    int len;
     //cout << "\033[H\033[2J\033[3J" ;
     if ((dir = opendir(tmp.c_str())) != nullptr) {
         while ((diread = readdir(dir)) != nullptr) {
             files.push_back(diread->d_name);
+            toprint.push_back(string(diread->d_name));
         }
         closedir (dir);
     } else {
@@ -178,39 +233,67 @@ void printfileofdirs(string tmp)
     }
    
     len = files.size();
-    for(int i=0;i<len;i++)
+    top = 0;
+    bottom = min(len,rowsize);
+    display();
+    moveCursor(1,0);
+
+}
+
+void display()
+{
+    cout<<clr;
+    moveWithout(1,0);
+    for(int i=top;i<bottom;i++)
     {
-	    struct stat binfo;
+        struct stat binfo;
         char date[100];
-	    lstat(files[i],&binfo);
+        lstat(files[i],&binfo);
         time_t t= binfo.st_mtime;
         string sized = getreadablesize(binfo.st_size);
         string per_str = getpermissions(binfo);
         strftime(date, 20, "%d-%m-%y %I:%M%p.", localtime(&(t)));
-	    cout<<files[i]<<"\t\t"<<per_str<<"\t\t"<<date<<"\n"; 
+        fflush(stdout);
+        cout<<toprint[i]<<"\t\t"<<sized<<"\t\t"<<per_str<<"\t\t"<<date<<"\n"; 
     }
 
-    moveCursor(1,0);
+    printmodeLine();
 
 }
 
 void scrollDown()
 {
     //cout<<"\033["<<files.size()<<";"<<cmdr<<"H";
-    if(posc<=files.size())
+    if(posc==files.size())
+        return;
+    if(posc<bottom)
     {
-        moveCursor(posc+1,0);
+        ++posc;
+        moveWithout(cursor+1,0);
+        return;
     }
+    top++;
+    posc++;
+    bottom = min(bottom+1,len);
+    display();
+    moveWithout(rowsize,0);
 
 }
 
 void scrollUp()
 {
-    if(posc>0)
+    if(posc==1)
+        return;
+    if(posc>top)
     {
-
-        moveCursor(posc-1,0);
+        --posc;
+        moveWithout(cursor-1,0);
+        return;
     }
+    top--;
+    bottom--;
+    display();
+    moveWithout(1,0);    
 
 }
 
@@ -297,6 +380,7 @@ void moveToBack()
 
 void enter()
 {
+    
     cout<<clr;
     //cout<<files[posc-1]<<endl;
     if(string(files[posc-1])==".")
@@ -333,8 +417,8 @@ void processCmds(string roll)
         string dest = cmds[cmds.size()-1];
         for(int i=1;i<cmds.size()-1;i++)
         {
-            if(copy_file(cmds[i],dest));
-                deleteFile(cmds[i]);
+            if(copy(createAbs(cmds[i]),createAbs(dest)))
+                deleteFile(createAbs(cmds[i]));
         }
 
     }
@@ -343,7 +427,7 @@ void processCmds(string roll)
     {
         for(int i=1;i<cmds.size();i++)
         {
-            if(cmd[i]==getcurrstring())
+            if(cmds[i]==getcurrstring())
                 return;
             deleteFile(cmds[i]);
         }
@@ -399,11 +483,23 @@ void processCmds(string roll)
         string dest = cmds[cmds.size()-1];
         for(int i=1;i<cmds.size()-1;i++)
         {
-            if(create_dir(cmds[i],dest))
+            if(create_dir(cmds[i],getcurrstring()+'/'+dest))
                 displayResult("Directory Created");
             else
                 displayResult("Creation failed");
         }   
+    }
+    else if(cmd=="create_file")
+    {
+        string dest = cmds[cmds.size()-1];
+        for(int i=1;i<cmds.size()-1;i++)
+        {
+            if(create_file(cmds[i],getcurrstring()+'/'+dest))
+                displayResult("File Created");
+            else
+                displayResult("File Creation failed");
+        }
+
     }
 
     cmds.clear();
@@ -411,6 +507,8 @@ void processCmds(string roll)
 
 void movetocmdmode()
 {
+    mode=0;
+    printmodeLine();
     moveCursor(cmdr,1);
     int curcol=1;
     //setCanonicalMode();
@@ -448,7 +546,9 @@ void movetocmdmode()
     }
 
     moveCursor(1,0);
-
+    mode=1;
+    printfileofdirs(getcurrstring());
+    printmodeLine();
     return;
     //change to canonical mode
     //read Input    
@@ -473,7 +573,15 @@ void home()
     movetodir(getcurrstring());
 }
 
+void do_resize(int dummy)
+{
+    setWindowParams();
+    printfileofdirs(getcurrstring());
+    printmodeLine();
+}
+
 int main() {
+    signal(SIGWINCH, do_resize);
     initialize();
     char tmp[PATH_MAX];
     getcwd(tmp, PATH_MAX);
@@ -481,6 +589,7 @@ int main() {
     //cout<<string(tmp)<<endl;
     cout << clr;
     printfileofdirs(getcurrstring());
+    printmodeLine();
     //moveCursor(1,0);
     char c=' ';
     

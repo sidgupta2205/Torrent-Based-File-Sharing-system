@@ -8,7 +8,9 @@
 #include<fcntl.h>
 #include<iostream>
 #include<errno.h>
+#include<algorithm>
 #include<string.h>
+#include<signal.h>
 #include<ctime>
 #define buffer_size 4096
 #define mousefile /dev/input/mice
@@ -19,5 +21,7 @@
 #define GB_SIZE 1073741824
 #define ll unsigned long long 
 #define HOME "/"
+
+
 
 

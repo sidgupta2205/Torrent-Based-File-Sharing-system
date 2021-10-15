@@ -2,8 +2,9 @@
 
 using namespace std;
 
-void copy(string,string);
-
+bool copy(string,string);
+int deleteFile(string);
+string extract_name(string);
 
 void deleteDir(string dirName)
 {
@@ -21,7 +22,7 @@ void deleteDir(string dirName)
 				continue;
 		}
 
-		deleteFile(dirName+"/"+dname);
+		if(deleteFile(dirName+"/"+dname));
 	}
 	closedir(di);
 	return;
@@ -30,27 +31,45 @@ void deleteDir(string dirName)
 int deleteFile(string file)
 {
 	struct stat fileInfo;
-	lstat(file.c_str(),fileInfo);
+	lstat(file.c_str(),&fileInfo);
 	if(S_ISDIR(fileInfo.st_mode))
 	{
 		deleteDir(file);
 		rmdir(file.c_str());
+		return 1;
 	}
 	else
 	{
 		return unlink(file.c_str());
 	}
 
+	return 0;
+
 }
 
-bool create_dir(string name,string dest)
+
+bool create_file(string src,string dest)
 {
-	string full = dest+"/"+name;
+	int fd2;
+	string str = dest+'/'+src;
+	if ((fd2=open((str).c_str(),O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR))<0)
+		return false;
+	close(fd2);
+	return true;
+
+}
+
+bool create_dir(string src,string dest)
+{
+	string name = extract_name(src);
+	string full = dest+'/'+name;
 	
 	try
 	{
-		mkdir(full.c_str(),S_IRUSR|S_IWUSR|S_IXUSR);
-		return true;
+		if(mkdir(full.c_str(),S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)==0)
+			return true;
+		cout<<strerror(errno);
+		return false;
 	}
 	catch(exception &e)
 	{
@@ -115,6 +134,26 @@ bool searchFile(string curr_dir,string name)
 
 }
 
+string extract_name(string src)
+{
+	string roll="";
+    int i=0;
+    while(i<src.size())
+    {
+        if(src[i]=='/')
+        {
+            roll="";
+        }
+        else
+        {
+            roll.push_back(src[i]);
+        }
+        i++;
+
+    }
+    return roll;
+}
+
 int copy_file(string src,string dest)
 {
 
@@ -123,11 +162,11 @@ int copy_file(string src,string dest)
 	int fd1;
 	int fd2;
 
-	
+	string name=extract_name(src);
 
 	if ((fd1=open(src.c_str(),O_RDWR))<0)
 		cout<<"creat error"<<endl;
-	if ((fd2=open((dest+"/"+src).c_str(),O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR))<0)
+	if ((fd2=open((dest+"/"+name).c_str(),O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR))<0)
 		cout<<"creat error"<<endl;
 
 
@@ -151,7 +190,7 @@ int copy_file(string src,string dest)
 
 }
 
-void copy_dir_helper(string dirName, string destination){
+bool copy_dir_helper(string dirName, string destination){
 
 	DIR *di;
 	struct dirent *diren;
@@ -159,7 +198,7 @@ void copy_dir_helper(string dirName, string destination){
 
 	if(!(di = opendir(dirName.c_str()))){
 		cout<<"Can't open the directory";
-		return;
+		return true;
 	}
 
 	while((diren = readdir(di))){
@@ -168,13 +207,16 @@ void copy_dir_helper(string dirName, string destination){
 				continue;
 		}
 
-		copy(dname,destination);
+		if(copy(dirName+'/'+dname,destination))
+			continue;
+		else
+			return false;
 	}
 	closedir(di);
-	return;
+	return true;
 }
 
-void copy(string src,string dest)
+bool copy(string src,string dest)
 {
 
 	struct stat fileInfo;
@@ -182,12 +224,17 @@ void copy(string src,string dest)
 	if(S_ISDIR(fileInfo.st_mode))
 	{
 		create_dir(src,dest);
-		copy_dir_helper(src,dest+"/"+src);
+		return copy_dir_helper(src,dest+"/"+extract_name(src));
+
 	}
 	else
 	{
-		copy_file(src,dest);
+		return copy_file(src,dest);
+		
 	}
+
+	return false;
+
 
 }
 
