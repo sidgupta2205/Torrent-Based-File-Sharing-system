@@ -1,2 +1,7 @@
 -   Create a simple chat server application 1 uesr and 1 server
 -   Add multiple clients and 1 server
+-   Download files from server 
+-   Pass message from client to server then server to another client connected
+        - pass ip and port
+        - to send a message send to that paricular ip and port
+-   passing message between multiple clients using tracker

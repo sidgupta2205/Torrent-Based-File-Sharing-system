@@ -20,7 +20,7 @@
 
 using namespace std;
 
-
+int network_socket;
 
 void* clienthread(void* args)
 {
@@ -52,8 +52,10 @@ void* clienthread(void* args)
 	}
 
 	printf("Connection estabilished\n");
-
+	string cmds = "download";
 	// Send data to the socket
+	send(network_socket, cmds.c_str(),
+		sizeof(client_request), 0);
 	send(network_socket, client_request.c_str(),
 		sizeof(client_request), 0);
 
@@ -98,15 +100,106 @@ void* clienthread(void* args)
 	return 0;
 }
 
+void* connect(void *args)
+{
+
+	char buffer[1024];
+
+	std::string client_request = *reinterpret_cast<std::string*>(args);
+	
+
+	// Create a stream socket
+	network_socket = socket(AF_INET,
+							SOCK_STREAM, 0);
+
+	// Initialise port number and address
+	struct sockaddr_in server_address;
+	server_address.sin_family = AF_INET;
+	server_address.sin_addr.s_addr = INADDR_ANY;
+	server_address.sin_port = htons(8989);
+
+	// Initiate a socket connection
+	int connection_status = connect(network_socket,
+									(struct sockaddr*)&server_address,
+									sizeof(server_address));
+
+	// Check for connection error
+	if (connection_status < 0) {
+		puts("Error\n");
+		return 0;
+	}
+
+	printf("Connection estabilished\n");
+	string cmds = "connect";
+	// Send data to the socket
+	write(network_socket, cmds.c_str(),
+		sizeof(client_request));
+
+	//read(network_socket,buffer,1024);
+	cout<<"connected"<<endl;
+
+	pthread_exit(NULL);
+
+}
+
+void* send(void *args)
+{
+
+	char buffer[1024];
+
+	std::string client_request = *reinterpret_cast<std::string*>(args);
+	printf("Connection estabilished\n");
+	string cmds = "send_message";
+	// Send data to the socket
+	write(network_socket, cmds.c_str(),
+		sizeof(cmds));
+
+	write(network_socket, client_request.c_str(),
+		sizeof(client_request));
+
+	string message = "hello from client 1";
+
+	write(network_socket, message.c_str(),
+		sizeof(message));
+
+	//read(network_socket,buffer,1024);
+	cout<<"message sent"<<endl;
+
+	pthread_exit(NULL);
+
+}
+
+void recv_message()
+{
+	char buffer[1024];
+	cout<<network_socket<<endl;
+	read(network_socket,buffer,1024);
+	read(network_socket,buffer,1024);
+	cout<<buffer<<endl;
+	cout<<"exiting"<<endl;
+	pthread_exit(NULL);
+
+}
+
 // Driver Code
 int main()
 {
 	
 
-	// Input
-	string choice;
-	choice = "teams.png";
+	while(1)
+	{
+
+	string cmd;
+	cin>>cmd;
 	pthread_t tid;
+
+	cout<<cmd;
+
+	if(cmd=="download")
+	{
+		string choice;
+		choice = "teams.png";
+		
 
 	// Create connection
 	// depending on the input
@@ -117,9 +210,44 @@ int main()
 		pthread_create(&tid, NULL,
 					clienthread,
 					&choice);
-		sleep(20);
+		
+	}
+
+	else if(cmd=="connect")
+	{
+		string choice = "connect";
+		cout<<"connecting to server"<<endl;
+		pthread_create(&tid, NULL,
+					connect,
+					&choice);
+	}
+
+	else if(cmd=="sendmessage")
+	{
+		cout<<"sending message"<<endl;
+
+		string choice;
+		cin>>choice;
+		pthread_create(&tid, NULL,
+					send,
+					&choice);
+		
+
+	}
+	else
+	{
+		recv_message();
+	}
+
+	}
+
+	
+	
+	// Input
+	
 		
 	// Suspend execution of
 	// calling thread
-	pthread_join(tid, NULL);
+	// pthread_join(tid, NULL);
+	
 }

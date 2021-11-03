@@ -24,7 +24,7 @@ pthread_t tid;
 pthread_t writerthreads[100];
 pthread_t readerthreads[100];
 int readercount = 0;
-int port2;
+
 struct params
 {
 	char file_name[1024];
@@ -162,21 +162,20 @@ void* connect(void* p)
 	string t = string(buf);
 
 	cout<<t<<endl;
-	sleep(3);
+
 	// clients *cl = (clients*)p;
 	// data[cl->id] = *cl; 
 	// cout<<"connected with "<<cl->id<<endl;
+    sleep(3);
 	pthread_exit(NULL);
 
 }
-
-
 
 void* receving_thread(void* p)
 {
 	int i=0;
 	while (1) {
-		cout<<"receiving thread is active"<<endl;
+		
 		addr_size = sizeof(serverStorage);
 
 		// Extract the first
@@ -185,9 +184,8 @@ void* receving_thread(void* p)
 						(struct sockaddr*)&serverStorage,
 						&addr_size);
 		params p;
-		memset(cmds, 0, 1024);
+
 		//read cmds 1. connect 2. transfer message to client 3. get all clients registered 4. download
-		cout<<"receiving thread has accepted a connection"<<endl;
 		read(newSocket,cmds,1024);
 		cout<<cmds<<endl;
 		if(strcmp(cmds,"download")==0)
@@ -236,16 +234,6 @@ void* receving_thread(void* p)
 			//read message 
 		}
 
-		else if(strcmp(cmds,"recv_message"))
-		{
-
-			cout<<"recv_message is detected"<<endl;
-			char buffer[1024];
-			read(newSocket,buffer,1024);
-			cout<<"port received is "<<buffer<<endl;
-
-		}
-
 		if (i >= 50) {
 				// Update i
 				i = 0;
@@ -267,23 +255,20 @@ void* receving_thread(void* p)
 		
 	}
 
-	cout<<"receiving thread is dead"<<endl;
 	pthread_exit(NULL);
 }
 
 // Driver Code
-int main(int argc, char *argv[])
+int main()
 {
-    int port = strtol(argv[1],NULL,10);
-	port2 = strtol(argv[2],NULL,10);
-	int trackerport = strtol(argv[3],NULL,10);
+    
 	// Bind the socket to the
 	// address and port number.
 
 	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	serverAddr.sin_addr.s_addr = INADDR_ANY;
 	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(port);	
+	serverAddr.sin_port = htons(2999);	
 
 	bind(serverSocket,
 		(struct sockaddr*)&serverAddr,
@@ -304,116 +289,41 @@ int main(int argc, char *argv[])
 	string cmds;
 	while(1)
 	{
-			cmds.clear();
 			cin>>cmds;
-
 		if(cmds=="connect")
 		{
-					int network_socket;
+				int network_socket;
 
-			// Create a stream socket
-			network_socket = socket(AF_INET,
-									SOCK_STREAM, 0);
+		// Create a stream socket
+		network_socket = socket(AF_INET,
+								SOCK_STREAM, 0);
 
-			// Initialise port number and address
-			struct sockaddr_in server_address;
-			server_address.sin_family = AF_INET;
-			server_address.sin_addr.s_addr = INADDR_ANY;
-			server_address.sin_port = htons(port2);
+		// Initialise port number and address
+		struct sockaddr_in server_address;
+		server_address.sin_family = AF_INET;
+		server_address.sin_addr.s_addr = INADDR_ANY;
+		server_address.sin_port = htons(2001);
 
-			// Initiate a socket connection
-			int connection_status = connect(network_socket,
-											(struct sockaddr*)&server_address,
-											sizeof(server_address));
+		// Initiate a socket connection
+		int connection_status = connect(network_socket,
+										(struct sockaddr*)&server_address,
+										sizeof(server_address));
 
-			// Check for connection error
-			if (connection_status < 0) {
-				puts("Error\n");
-				return 0;
+		// Check for connection error
+		if (connection_status < 0) {
+			puts("Error\n");
+			return 0;
+		}
+
+		printf("Connection estabilished\n");
+		string message = "hello from client 2";
+		// Send data to the socket
+		send(network_socket, cmds.c_str(),
+			sizeof(cmds), 0);
+        send(network_socket,message.c_str(),sizeof(message),0);
 			}
-
-			printf("Connection estabilished\n");
-			string message = "hello from client 1";
-			// Send data to the socket
-			send(network_socket, cmds.c_str(),
-				sizeof(cmds), 0);
-			send(network_socket,message.c_str(),sizeof(message),0);
-		}
-
-		else if(cmds=="tracker_connect")
-		{
-			int network_socket;
-
-			network_socket = socket(AF_INET,
-									SOCK_STREAM, 0);
-
-			// Initialise port number and address
-			struct sockaddr_in server_address;
-			server_address.sin_family = AF_INET;
-			server_address.sin_addr.s_addr = INADDR_ANY;
-			server_address.sin_port = htons(trackerport);
-
-			// Initiate a socket connection
-			int connection_status = connect(network_socket,
-											(struct sockaddr*)&server_address,
-											sizeof(server_address));
-
-			// Check for connection error
-			if (connection_status < 0) {
-				puts("Error\n");
-				return 0;
-			}
-
-			printf("Connection estabilished\n");
-			string message = to_string(port);
-			// Send data to the socket
-			send(network_socket, cmds.c_str(),
-				sizeof(cmds), 0);
-			send(network_socket,message.c_str(),sizeof(message),0);
-		}
-
-		else if(cmds=="getport")
-		{
-
-			int network_socket;
-
-			network_socket = socket(AF_INET,
-									SOCK_STREAM, 0);
-
-			// Initialise port number and address
-			struct sockaddr_in server_address;
-			server_address.sin_family = AF_INET;
-			server_address.sin_addr.s_addr = INADDR_ANY;
-			server_address.sin_port = htons(trackerport);
-
-			// Initiate a socket connection
-			int connection_status = connect(network_socket,
-											(struct sockaddr*)&server_address,
-											sizeof(server_address));
-
-			// Check for connection error
-			if (connection_status < 0) {
-				puts("Error\n");
-				return 0;
-			}
-
-			string cm = "getport";
-			string cli = "1";
-
-			send(network_socket, cm.c_str(),
-				cm.size(), 0);
-			cout<<"sending cmd is "<<cm<<endl;
-			sleep(2);
-			send(network_socket,cli.c_str(),cli.size(),0);
-			cout<<"sending client"<<endl;
-			
-		}
-
-		
-			sleep(3);
-
-
-		}
+        sleep(5);
+	}
 	
 
 	// Array for thread
