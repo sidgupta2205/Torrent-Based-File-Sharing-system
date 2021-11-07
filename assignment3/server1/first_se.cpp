@@ -106,10 +106,28 @@ void* reader(void* param)
 
 		cout<<"file_sent"<<endl;
 		
+		if ((fd1=open(p->file_name,O_RDWR))<0)
+		{
+		cout<<"file does not exist"<<endl;
+		}
+		else
+		{
+			while((n=read(fd1,buf,1024))>0)
+			{
+				send(p->newfd, &buf,1024, 0);
+				curr = curr+n;
+				cout<<curr<<endl;
+			}
+
+			cout<<"file_sent"<<endl;
+			
+		}
+
+
 	}
 
 	
-	sleep(500);
+	sleep(1);
 
 	// Lock the semaphore
 	
@@ -309,7 +327,7 @@ int main(int argc, char *argv[])
 
 		if(cmds=="connect")
 		{
-					int network_socket;
+			int network_socket;
 
 			// Create a stream socket
 			network_socket = socket(AF_INET,
