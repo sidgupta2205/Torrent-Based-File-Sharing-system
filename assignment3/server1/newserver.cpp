@@ -20,7 +20,8 @@ void* receiving_thread(void*);
 void* receiving_tracker(void*);
 void* user_thread(void*);
 void* user_thread_connected(void*);
-
+string getfilesize(string);
+void getports(vector<int>&ports,string result);
 //- Bind to a address
 int main(int argc, char *argv[])
 {   
@@ -184,10 +185,30 @@ void* receiving_tracker(void *p)
             else
             {
                 cout<<"file found at "<<result<<endl;
-                cout<<"creating a thread for connecting with peer"<<endl;
-                int anss = strtol(result.c_str(),NULL,10);
+                cout<<"creating a few thread for connecting with peer"<<endl;
+                memset(message,0,1024);
+                cout<<"reading file size"<<endl;
+                read(tracker_socket,message,1024);
+                string size = string(message);
+                cout<<"file size is "<<size<<endl;
+                //int anss = strtol(result.c_str(),NULL,10);
+                vector<int> ports;
+                getports(ports,result);
+                string anss = to_string(ports[0]);
                 pthread_create(&rthreads[ithr++],NULL,user_thread,&anss);
             }
+
+        }
+
+        else if (cmd=="getfilesize")
+        {
+            string res ="filename";
+            send(tracker_socket,res.c_str(),res.size(),0);
+            memset(message,0,1024);
+            read(tracker_socket,message,1024);
+            string fname = string(message);
+            string siz = getfilesize(fname);
+            send(tracker_socket,siz.c_str(),siz.size(),0);
 
         }
 
@@ -310,6 +331,16 @@ void* user_thread(void *p)
     pthread_exit(NULL);
 }
 
+string getfilesize(string filename)
+{
+    struct stat binfo;
+    lstat(filename.c_str(),&binfo);
+    unsigned long long size;
+	size = binfo.st_size;
+    string res = to_string(size); 
+    return res;
+}
+
 void* user_thread_connected(void *p)
 {
 
@@ -392,5 +423,24 @@ void* user_thread_connected(void *p)
 
     
     pthread_exit(NULL);
+
+}
+
+
+void getports(vector<int>&ports,string result)
+{
+    istringstream ss(result);
+  
+    string word; // for storing each word
+  
+    // Traverse through all words
+    // while loop till we get 
+    // strings to store in string word
+    while (ss >> word) 
+    {
+        // print the read word
+        cout << word << "\n";
+        ports.push_back(stoi(word));
+    }
 
 }

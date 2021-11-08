@@ -22,8 +22,6 @@ void* user_thread(void*);
 void* user_thread_connected(void*);
 string getfilesize(string);
 void getports(vector<int>&ports,string result);
-void gettokens(vector<string>&,string);
-void copy_string(string &a,string b);
 //- Bind to a address
 int main(int argc, char *argv[])
 {   
@@ -85,31 +83,24 @@ int main(int argc, char *argv[])
 
 
 
+
 //  Main thread will take commands and send to tracker using fd created earlier
     while(1)
     {
         string cmd;
-        getline(cin,cmd);
+        cin>>cmd;
 
-        
-        vector<string> tokens;
-        //send(tracker_socket,cmd.c_str(),cmd.size(),0);
-        string tokenize;
-        copy_string(tokenize,cmd);
-        cout<<"sending "<<cmd<<endl;
-        gettokens(tokens,tokenize);
-        cout<<"sending "<<cmd<<endl;
-        
+        cout<<"sending"<<cmd<<endl;
+        send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
         if(cmd=="getport")
         {
-            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);    
+            
             string client_name;
             cin>>client_name;
             send(tracker_socket,client_name.c_str(),sizeof(client_name),0);        
         }
         else if(cmd=="seed_file")
         {
-            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
             string file_name;
             cin>>file_name;
             send(tracker_socket,file_name.c_str(),sizeof(file_name),0);
@@ -117,38 +108,9 @@ int main(int argc, char *argv[])
         }
         else if(cmd=="download_file")
         {
-            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
             string file_name;
             cin>>file_name;
             send(tracker_socket,file_name.c_str(),sizeof(file_name),0);
-        }
-
-        else if(tokens[0]=="create_user")
-        {
-            if(tokens.size()<3)
-            {
-                cout<<"incorrect command"<<endl;
-            }
-            else
-            {
-                cout<<cmd<<endl;
-                send(tracker_socket,cmd.c_str(),cmd.size(),0);
-                
-            }
-            
-        }
-
-        else if(tokens[0]=="login")
-        {
-            if(tokens.size()<3)
-            {
-                cout<<"incorrect commd"<<endl;
-            }
-            else
-            {
-                cout<<"login initiated"<<endl;
-                send(tracker_socket,cmd.c_str(),cmd.size(),0);   
-            }
         }
 
         sleep(0.1);
@@ -233,7 +195,8 @@ void* receiving_tracker(void *p)
                 vector<int> ports;
                 getports(ports,result);
                 string anss = to_string(ports[0]);
-                pthread_create(&rthreads[ithr++],NULL,user_thread,&anss);
+                cout<<"creating new thread"<<endl;
+                //pthread_create(&rthreads[ithr++],NULL,user_thread,&anss);
             }
 
         }
@@ -248,22 +211,6 @@ void* receiving_tracker(void *p)
             string siz = getfilesize(fname);
             send(tracker_socket,siz.c_str(),siz.size(),0);
 
-        }
-        else if(cmd=="Registration success")
-        {
-            cout<<"User sucessfully registered"<<endl;
-        }
-        else if(cmd=="Registration failed")
-        {
-            cout<<"User cannot be registered"<<endl;
-        }
-        else if(cmd=="Login Success")
-        {
-            cout<<"User successfully logeed in "<<endl;
-        }
-        else if(cmd=="Login Failure")
-        {
-            cout<<"User Login failed"<<endl;
         }
 
         sleep(0.1);
@@ -497,31 +444,4 @@ void getports(vector<int>&ports,string result)
         ports.push_back(stoi(word));
     }
 
-}
-
-void gettokens(vector<string>&tokens,string details)
-{
-
-    istringstream ss(details);
-  
-    string word; // for storing each word
-  
-    // Traverse through all words
-    // while loop till we get 
-    // strings to store in string word
-    while (ss >> word) 
-    {
-        // print the read word
-        //cout << word << "\n";
-        tokens.push_back(word);
-    }
-
-}
-
-void copy_string(string &a, string b)
-{
-    for (char i:b)
-    {
-        a.push_back(i);
-    }
 }
