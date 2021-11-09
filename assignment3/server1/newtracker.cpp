@@ -3,6 +3,7 @@ using namespace std;
 // Tracker
 // - Start listening with a port
 
+//current group id
 int serverSocket, newSocket;
 
 struct filesInfo
@@ -20,6 +21,15 @@ struct User
     int fd;
 };
 
+struct Group
+{
+    string groupid;
+    string owner;
+    vector<string> group_users;
+    vector<filesInfo> files;
+    vector<string> user_requests;
+};
+
 struct sockaddr_in serverAddr;
 struct sockaddr_storage serverStorage;
 char cmds[1024];
@@ -27,12 +37,15 @@ socklen_t addr_size;
 pthread_t rthreads[100];
 map<int,int>data;
 map<string,User> users;
+map<string,Group> groups;
 
 
 
 map<string,filesInfo>files;
 void* user_thread(void*);
 void gettokens(vector<string>&,string);
+string getall(vector<string>);
+string getallgroups();
 
 int main(int argc,char *argv[])
 {
@@ -49,7 +62,7 @@ int main(int argc,char *argv[])
 		printf("Error\n");
 
 
-// - For every connect request create a thread for that user
+ // - For every connect request create a thread for that user
     int i=0;
 	while (1) {
 		cout<<"receiving thread is active"<<endl;
@@ -78,6 +91,7 @@ void* user_thread(void *p)
 {
 
     int fd = *((int*)p);
+    string user_id = "";
     char buffer[1024];
     char message[1024];
     read(fd,message,1024);
@@ -191,7 +205,7 @@ void* user_thread(void *p)
             cout<<"User Registration successfull"<<endl;
 
         }
-        else if(tokens[0]=="login")
+        else if(tokens.size()>0 and tokens[0]=="login")
         {
             cout<<"command recvd is "<<cmd<<endl;
             if(users.find(tokens[1])==users.end())
@@ -204,6 +218,7 @@ void* user_thread(void *p)
             {
                 if(users[tokens[1]].passw == tokens[2])
                 {
+                    user_id = tokens[1];
                     string res="Login Success";
                     cout<<res<<endl;
                     send(fd,res.c_str(),res.size(),0);
@@ -218,9 +233,177 @@ void* user_thread(void *p)
             }
         }
 
+        else if(tokens.size()>0 and tokens[0]=="create_group")
+        {
+            if(user_id=="")
+            {
+                cout<<"User not logged in"<<endl;
+                string res = "Group creation failed";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+
+            }
+
+            else if(groups.find(tokens[1])!=groups.end())
+            {
+                string res = "Group creation failed";
+                cout<<"Group user id already taken"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                Group g;
+                g.groupid = tokens[1];
+                g.owner = user_id;
+                g.group_users.push_back(user_id);
+                groups[tokens[1]] = g;
+                string res = "Group creation success";
+                send(fd,res.c_str(),res.size(),0);
+                cout<<res<<"by "<<user_id<<endl;
+            }
+        }
+
+        else if(tokens.size()>0 and tokens[0]=="list_groups")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                string res = getallgroups();
+                res = "group_details " + res;
+                cout<<"sending group details "<<res;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            
+        }
+
+        else if(tokens[0]=="join_group")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[1])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                auto it = find(groups[tokens[1]].group_users.begin(),groups[tokens[1]].group_users.end(),user_id);
+                auto it2 = find(groups[tokens[1]].user_requests.begin(),groups[tokens[1]].user_requests.end(),user_id);
+                if(it!=groups[tokens[1]].group_users.end())
+                {
+                    string res = "User Already Present";
+                    cout<<res<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else if(it2!=groups[tokens[1]].user_requests.end())
+                {
+                    string res = "User request Already Present";
+                    cout<<res<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+
+                }
+                else
+                {
+
+                    string res = "User Request Registered with group";
+                    cout<<res<<endl;
+                    groups[tokens[1]].user_requests.push_back(user_id);
+                    send(fd,res.c_str(),res.size(),0);
+
+                }
+            }
+            
+        }
+
+        else if(tokens[0]=="requests")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[2])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups[tokens[2]].owner!=user_id)
+            {
+                string res="Permission denied to user";
+                cout<<"Requested user not group owner"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else 
+            {
+                string res = getall(groups[tokens[2]].user_requests);
+                cout<<"Sending user request "<<endl;
+                res = "request_list "+res;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            
+        }
+        else if(tokens[0]=="accept_request")
+        {
+            
+            //token 1 group id
+            //token 2 user id
+
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[1])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups[tokens[1]].owner!=user_id)
+            {
+                string res="Permission denied to user";
+                cout<<"Requested user not group owner"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                auto it2 = find(groups[tokens[1]].user_requests.begin(),groups[tokens[1]].user_requests.end(),tokens[2]);
+                if(it2==groups[tokens[1]].user_requests.end())
+                {
+                    string res="User has not requested";
+                    cout<<res<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else
+                {
+                    groups[tokens[1]].user_requests.erase(remove(groups[tokens[1]].user_requests.begin(), groups[tokens[1]].user_requests.end(), tokens[2]), groups[tokens[1]].user_requests.end());
+                    groups[tokens[1]].group_users.push_back(tokens[2]);
+                    string res="User added in group";
+                    cout<<"User has been successfully added to group"<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+            }
+
+        }
+
         sleep(0.1);
 
     }
+
+    pthread_exit(NULL);
 
 }
 
@@ -243,3 +426,31 @@ void gettokens(vector<string>&tokens,string details)
 
 }
 
+string getallgroups()
+{
+    string res="";
+    for ( auto it = groups.begin(); it != groups.end(); ++it  )
+    {
+        res = res+it->first+" ";   
+    }
+
+    if(res!="")
+        res.pop_back();
+    
+    return res;
+}
+
+string getall(vector<string> users)
+{
+    string res="";
+
+    for (string usr:users)
+    {
+        res = res+usr+" ";
+    }
+    if(res!="")
+        res.pop_back();
+
+    return res; 
+
+}

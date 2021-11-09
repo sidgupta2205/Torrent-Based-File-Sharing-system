@@ -27,6 +27,7 @@ Server
         - seed same file from multiple server
         - get file size from tracker
         - create user
+        - create group
         
 
 Tracker
@@ -37,3 +38,8 @@ Tracker
         - save multiple ports for same file
         - save size of file in tracker
         - save user info in a struct with userid, password, port, fd
+        - save group info in struct wtih groupid, owner, users, files, requests
+        - save group info
+
+Bugs
+        - Everything closes

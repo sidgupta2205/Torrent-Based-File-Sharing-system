@@ -22,6 +22,10 @@ void* user_thread(void*);
 void* user_thread_connected(void*);
 string getfilesize(string);
 void getports(vector<int>&ports,string result);
+void gettokens(vector<string>&,string);
+void copy_string(string &a,string b);
+void printall(vector<string>,int);
+
 //- Bind to a address
 int main(int argc, char *argv[])
 {   
@@ -83,24 +87,31 @@ int main(int argc, char *argv[])
 
 
 
-
 //  Main thread will take commands and send to tracker using fd created earlier
     while(1)
     {
         string cmd;
-        cin>>cmd;
+        getline(cin,cmd);
 
-        cout<<"sending"<<cmd<<endl;
-        send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
+        
+        vector<string> tokens;
+        //send(tracker_socket,cmd.c_str(),cmd.size(),0);
+        string tokenize;
+        copy_string(tokenize,cmd);
+        cout<<"sending "<<cmd<<endl;
+        gettokens(tokens,tokenize);
+        cout<<"sending "<<cmd<<endl;
+        
         if(cmd=="getport")
         {
-            
+            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);    
             string client_name;
             cin>>client_name;
             send(tracker_socket,client_name.c_str(),sizeof(client_name),0);        
         }
         else if(cmd=="seed_file")
         {
+            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
             string file_name;
             cin>>file_name;
             send(tracker_socket,file_name.c_str(),sizeof(file_name),0);
@@ -108,9 +119,91 @@ int main(int argc, char *argv[])
         }
         else if(cmd=="download_file")
         {
+            send(tracker_socket,cmd.c_str(),sizeof(cmd),0);
             string file_name;
             cin>>file_name;
             send(tracker_socket,file_name.c_str(),sizeof(file_name),0);
+        }
+
+        else if(tokens[0]=="create_user")
+        {
+            if(tokens.size()<3)
+            {
+                cout<<"incorrect command"<<endl;
+            }
+            else
+            {
+                cout<<cmd<<endl;
+                send(tracker_socket,cmd.c_str(),cmd.size(),0);
+                
+            }
+            
+        }
+
+        else if(tokens[0]=="login")
+        {
+            if(tokens.size()<3)
+            {
+                cout<<"incorrect commd"<<endl;
+            }
+            else
+            {
+                cout<<"login initiated"<<endl;
+                send(tracker_socket,cmd.c_str(),cmd.size(),0);   
+            }
+        }
+
+        else if(tokens[0]=="create_group")
+        {
+            if(tokens.size()<2)
+            {
+                cout<<"incorrect commd"<<endl;
+            }
+            else
+            {
+                cout<<"create group initiated"<<endl;
+                send(tracker_socket,cmd.c_str(),cmd.size(),0);
+            }
+
+        }
+
+        else if(tokens[0]=="list_groups")
+        {
+            send(tracker_socket,cmd.c_str(),cmd.size(),0);
+        }
+
+        else if(tokens[0]=="join_group")
+        {
+            if(tokens.size()<2)
+            {
+                cout<<"Invalid cmd"<<endl;
+                continue;
+            }
+            send(tracker_socket,cmd.c_str(),cmd.size(),0);
+        }
+
+        else if(tokens[0]=="requests")
+        {
+            if(tokens.size()<3)
+            {
+                cout<<"Invalid cmd"<<endl;
+                continue;
+            }
+            send(tracker_socket,cmd.c_str(),cmd.size(),0);
+        }
+
+        //accept_request group_id user_id
+        else if(tokens[0]=="accept_request")
+        {
+
+            if(tokens.size()<3)
+            {
+                cout<<"Invalid cmd"<<endl;
+                continue;
+            }
+
+            send(tracker_socket,cmd.c_str(),cmd.size(),0);
+
         }
 
         sleep(0.1);
@@ -211,7 +304,80 @@ void* receiving_tracker(void *p)
             send(tracker_socket,siz.c_str(),siz.size(),0);
 
         }
+        else if(cmd=="Registration success")
+        {
+            cout<<"User sucessfully registered"<<endl;
+        }
+        else if(cmd=="Registration failed")
+        {
+            cout<<"User cannot be registered"<<endl;
+        }
+        else if(cmd=="Login Success")
+        {
+            cout<<"User successfully logeed in "<<endl;
+        }
+        else if(cmd=="Login Failure")
+        {
+            cout<<"User Login failed"<<endl;
+        }
+        else if(cmd=="Group creation success")
+        {
+            cout<<"Group successfully created"<<endl;
+        }
+        else if(cmd=="Group creation failed")
+        {
+            cout<<"Group cannot be created"<<endl;
+        }
+        else if(cmd=="Not Logged In")
+        {
+            cout<<"User is not logged in"<<endl;
+        }
+        else if(cmd=="User Request Registered with group")
+        {
+            cout<<"User request is successfully Registered with group"<<endl;
+        }
+        else if(cmd=="User Already Present")
+        {
+            cout<<"User is already regitered with the group"<<endl;
+        }
+        else if(cmd=="User request Already Present")
+        {
+            cout<<"User request already regitered with the group"<<endl;
+        }
+        else if(cmd=="Unable to join group")
+        {
+            cout<<"Unable to join group at this momemt"<<endl;
+        }
+        else if(cmd=="Permission denied to user")
+        {
+            cout<<"User does not have permission for this group"<<endl;
+        }
+        else if(cmd=="User has not requested")
+        {
+            cout<<"Given user has not requested to join the group"<<endl;
+        }
+        else if(cmd=="User added in group")
+        {
+            cout<<"Given user has is successfully added to the group"<<endl;
+        }
+        else
+        {
 
+            vector<string> tokens;
+            gettokens(tokens,cmd);
+            
+            if(tokens[0]=="group_details")
+            {
+                cout<<"Group details"<<endl;
+                printall(tokens,1);
+            }
+            else if(tokens[0]=="request_list")
+            {
+                cout<<"request list details"<<endl;
+                printall(tokens,1);
+            }
+            
+        }
         sleep(0.1);
         
     }
@@ -443,4 +609,39 @@ void getports(vector<int>&ports,string result)
         ports.push_back(stoi(word));
     }
 
+}
+
+void gettokens(vector<string>&tokens,string details)
+{
+
+    istringstream ss(details);
+  
+    string word; // for storing each word
+  
+    // Traverse through all words
+    // while loop till we get 
+    // strings to store in string word
+    while (ss >> word) 
+    {
+        // print the read word
+        //cout << word << "\n";
+        tokens.push_back(word);
+    }
+
+}
+
+void copy_string(string &a, string b)
+{
+    for (char i:b)
+    {
+        a.push_back(i);
+    }
+}
+
+void printall(vector<string> tokens,int index)
+{
+    for(int i=index;i<tokens.size();i++)
+    {
+        cout<<i<<" "<<tokens[i]<<endl; 
+    }
 }
