@@ -26,7 +26,7 @@ struct Group
     string groupid;
     string owner;
     vector<string> group_users;
-    vector<filesInfo> files;
+    map<string,filesInfo> files;
     vector<string> user_requests;
 };
 
@@ -46,6 +46,7 @@ void* user_thread(void*);
 void gettokens(vector<string>&,string);
 string getall(vector<string>);
 string getallgroups();
+string getallfiles(string);
 
 int main(int argc,char *argv[])
 {
@@ -233,6 +234,23 @@ void* user_thread(void *p)
             }
         }
 
+        else if(tokens[0]=="logout")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                string res = "user logged out success";
+                user_id = "";
+                cout<<"user logged out success"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+        }
+
         else if(tokens.size()>0 and tokens[0]=="create_group")
         {
             if(user_id=="")
@@ -399,6 +417,138 @@ void* user_thread(void *p)
 
         }
 
+        //upload_file path group_id
+        else if(tokens[0]=="upload_file")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[2])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                auto it2 = find(groups[tokens[2]].group_users.begin(),groups[tokens[2]].group_users.end(),user_id);
+                if(it2==groups[tokens[2]].user_requests.end())
+                {
+                    string res="Invalid request";
+                    cout<<"User does not exist in group"<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else
+                {
+                    if(groups[tokens[2]].files.find(tokens[1])==groups[tokens[2]].files.end())
+                    {
+                        //create a filesInfo
+                        filesInfo f;
+                        f.name = tokens[1];
+                        f.portno = to_string(port_no);
+                        string gcmd = "getfilesize2 "+f.name;
+                        send(fd,gcmd.c_str(),sizeof(gcmd),0);
+                        memset(message, 0, 1024);
+                        read(fd,message,1024);
+                        string res = string(message);
+                        f.size = res;
+                        cout<<f.name<<" with "<<f.size<<" is available to download "<<endl;
+                        groups[tokens[2]].files[f.name] = f;
+                    }
+                    else
+                    {
+                        groups[tokens[2]].files[tokens[1]].portno +=" "+port_no;
+                        cout<<"port no added for file"<<endl;
+                    }
+
+                    string res = "File uploaded success";
+                    send(fd,res.c_str(),res.size(),0);
+
+                }
+            }
+
+        }
+        else if(tokens[0]=="list_files")
+        {
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[1])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                auto it2 = find(groups[tokens[1]].group_users.begin(),groups[tokens[1]].group_users.end(),user_id);
+                if(it2==groups[tokens[1]].user_requests.end())
+                {
+                    string res="Invalid request";
+                    cout<<"User does not exist in group"<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else
+                {
+                    string res = getallfiles(tokens[1]);
+                    res = "list_file "+res;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+            }
+        }
+        //download_file <group_id> <file_name> <destination_path>
+        else if(tokens[0]=="download_files")
+        {
+            
+            if(user_id=="")
+            {
+                string res="Not Logged In";
+                cout<<res<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else if(groups.find(tokens[1])==groups.end())
+            {
+                string res="Unable to join group";
+                cout<<"Group not found"<<endl;
+                send(fd,res.c_str(),res.size(),0);
+            }
+            else
+            {
+                auto it2 = find(groups[tokens[1]].group_users.begin(),groups[tokens[1]].group_users.end(),user_id);
+                if(it2==groups[tokens[1]].user_requests.end())
+                {
+                    string res="Invalid request";
+                    cout<<"User does not exist in group"<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else if(groups[tokens[1]].files.find(tokens[2])==groups[tokens[1]].files.end())
+                {
+                    string res="File not Found";
+                    cout<<"Requested File is not present in the group"<<endl;
+                    send(fd,res.c_str(),res.size(),0);
+                }
+                else
+                {
+                    string res = "file_info "+groups[tokens[1]].files[tokens[2]].size+" "+groups[tokens[1]].files[tokens[2]].portno;
+                    send(fd,res.c_str(),res.size(),0);
+                    cout<<res<<endl;
+                }
+            }
+
+            // login
+            // group
+            // member
+            // file present
+            // sent size and port no's    
+        }
+
+
         sleep(0.1);
 
     }
@@ -453,4 +603,19 @@ string getall(vector<string> users)
 
     return res; 
 
+}
+
+string getallfiles(string group_id)
+{
+    
+    string res="";
+    for ( auto it = groups[group_id].files.begin(); it != groups[group_id].files.end(); ++it  )
+    {
+        res = res+it->first+" ";   
+    }
+
+    if(res!="")
+        res.pop_back();
+    
+    return res;
 }

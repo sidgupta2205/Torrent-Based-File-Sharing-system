@@ -28,6 +28,8 @@ Server
         - get file size from tracker
         - create user
         - create group
+        - upload file -> check constraints (login, group, member) -> check if filename in map -> yes (add port no in portno) -> send to user file is uploaded successfully
+                                                                                              -> no (create new fileInfo, get size, add portno , add in file)
         
 
 Tracker
