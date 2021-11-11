@@ -1,20 +1,27 @@
 #include "allheaders.h"
-
+#define chunksize 524288
 using namespace std;
 
+struct pieces
+{
+    int dindex;
+    int chunks;
+    int offset;
+    int port_no;
+};
 
 struct Download
 {
-    Download(string filename,int port, int chunkns,int i,string si)
+    Download(string filename,vector<int> port, int chunkns,int i,string si)
     {
         port_no = port;
-        file_name = file_name;
+        file_name = filename;
         chunks = chunkns;
         completed = 0;
         index = i;
         size = strtol(si.c_str(),NULL,10);
     }
-    int port_no;
+    vector<int> port_no;
     int fd;
     int chunks;
     int completed;
@@ -48,6 +55,7 @@ string getfilesize(string);
 void getports(vector<int>&ports,string result);
 void gettokens(vector<string>&,string);
 void printall(vector<string>,int);
+void piecewise(vector<pieces>&,Download&);
 void copy_string(string &a,string b);
 int create_file(string);
 string getfilename(string);
@@ -294,6 +302,7 @@ int main(int argc, char *argv[])
 
             src_file = tokens[2];
             dest_file = tokens[3];
+            cout<<src_file<<" "<<dest_file<<endl;
             send(tracker_socket,cmd.c_str(),cmd.size(),0);
 
             // taking into consideration destination path is always valid
@@ -504,11 +513,11 @@ void* receiving_tracker(void *p)
                 string port_nos = tokens[2];
                 cout<<size<<" "<<port_nos<<endl;
                 vector<int> ports;
-                getports(ports,port_nos);
+                getports(ports,cmd);
                 string anss = to_string(ports[0]);
                 cout<<"asking for file with port "<<anss<<endl;
                 // fill download dsa
-                Download d(src_file,ports[0],1,Downloads.size(),size);
+                Download d(src_file,ports,1,Downloads.size(),size);
                 //create dest file and add fd
                 d.fd = create_file(dest_file);
                 if(d.fd<0)
@@ -517,12 +526,24 @@ void* receiving_tracker(void *p)
                 }
                 else
                 {
-                    Downloads.push_back(d);
+                    
+
+                    cout<<d.file_name<<d.size<<endl;
                     // divide in chunks
                     //currently 1
                 // distribute in threads
                                 // entry in downloads
-                pthread_create(&rthreads[ithr++],NULL,user_thread,&d);
+                    vector<pieces> vec;
+                    piecewise(vec,d);
+                    Downloads.push_back(d);
+                    cout<<vec.size()<<endl;
+                    for(pieces p:vec)
+                    {
+                        cout<<"trying to connect with "<<p.port_no<<endl;
+                        pthread_create(&rthreads[ithr++],NULL,user_thread,&p);
+                        sleep(3);
+                    }
+                        
                 }
                 
             }
@@ -539,7 +560,8 @@ void* receiving_tracker(void *p)
 //thread for a new user 
 void* user_thread(void *p)
 {
-    Download *ptr = (Download *) p;
+    pieces *pie = (pieces*)p;
+    Download *ptr = &Downloads[pie->dindex];
 
     // connect with user
     // ask for chunk of file
@@ -549,7 +571,7 @@ void* user_thread(void *p)
     // if yes move from downloads to src
     // add port no in downloading
 
-    int port = ptr->port_no;
+    int port = pie->port_no;
     cout<<"connecting at port "<<port<<endl;
     int user_socket = socket(AF_INET,SOCK_STREAM, 0);
     // Initialise port number and address
@@ -621,12 +643,14 @@ void* user_thread(void *p)
                 }
                 
 
-                
+                int t = 0;
                 while(size>0)
                 {
+                    
+                    
                     n=read(user_socket,buf,1024);
                     // copy contents in the file
-                    if(write(fd2,buf,n)!=n)
+                    if(pwrite(fd2,buf,n,t)!=n)
                     {
                         //cout<<strerror(errno);
                         cout<<"error"<<endl;
@@ -634,6 +658,7 @@ void* user_thread(void *p)
                     }
                     // reduce size 
                     size = size-n;
+                    t = t+n;
                     cout<<size<<endl;
                 }
 
@@ -654,7 +679,9 @@ void* user_thread(void *p)
     else if(cmd=="downloads_file")
     {
         string file_name = ptr->file_name;
-        string res = "downloads_file "+file_name+" "+to_string(ptr->chunks);
+        string res = "downloads_file "+file_name+" "+to_string(pie->chunks)+" "+to_string(pie->offset);
+        cout<<res<<endl;
+        send(user_socket,res.c_str(),res.size(),0);
         char message[1024];
         memset(message,0,1024);
         read(user_socket,message,1024);
@@ -662,27 +689,31 @@ void* user_thread(void *p)
         if(sized=="sending")
         {   
             //change as per chunksize
-            int chunksize = ptr->size;
+            int csg = (pie->chunks)*chunksize;
             int n;
-            char buf[1024];
+            char buf[chunksize];
             int fd2 = ptr->fd;
-            while(chunksize>0)
+            int t = pie->offset;
+            while(csg>0)
             {
-                    n=read(user_socket,buf,1024);
-                    // copy contents in the file
-                    if(write(fd2,buf,n)!=n)
-                    {
-                        //cout<<strerror(errno);
-                        cout<<"error"<<endl;
-                        break;
-                    }
-                    // reduce size 
-                    chunksize = chunksize-n;
-                    cout<<chunksize<<endl;
+                n=read(user_socket,buf,chunksize);
+                // copy contents in the file
+                if(pwrite(fd2,buf,n,t)!=n)
+                {
+                    //cout<<strerror(errno);
+                    cout<<"error"<<endl;
+                    break;
+                }
+                // reduce size 
+                csg = csg-n;
+                t = t+n;
+                cout<<csg<<endl;
             }
 
                 cout<<"copy success"<<endl;
-            //start downloading
+
+            // remove from downloading and push in completed 
+            // 
         }
         else
         {
@@ -724,6 +755,7 @@ void* user_thread_connected(void *p)
         string cmds = string(cmd);
         vector<string>token;
         gettokens(token,cmds);
+        cout<<cmds<<endl;
         if(cmds=="download_file")
         {
             cout<<"download_file received";
@@ -761,7 +793,7 @@ void* user_thread_connected(void *p)
                             char buf[1024];
                             int n;
                             int curr=0;
-                            while((n=read(fd1,buf,1024))>0)
+                            while((n=pread(fd1,buf,1024,curr))>0)
                             {
                                 send(fd, &buf,1024, 0);
                                 curr = curr+n;
@@ -788,6 +820,9 @@ void* user_thread_connected(void *p)
         {
             string file_name = token[1];
             int chunks = strtol(token[2].c_str(),NULL,10);
+            cout<<"chance of segfault"<<endl;
+            int offset = strtol(token[3].c_str(),NULL,10);
+
             if(checkfile(file_name))
             {
                 string res="sending";
@@ -796,12 +831,12 @@ void* user_thread_connected(void *p)
 
                 int fd1=open(file_name.c_str(),O_RDWR);
 
-                char buf[1024];
+                char buf[chunksize];
                 int n;
-                int curr=0;
-                while((n=read(fd1,buf,1024))>0)
+                int curr=offset;
+                while(chunks-- and (n=pread(fd1,buf,chunksize,curr))>0)
                 {
-                    send(fd, &buf,1024, 0);
+                    send(fd, &buf,chunksize, 0);
                     curr = curr+n;
                     cout<<curr<<endl;
                 }
@@ -816,6 +851,7 @@ void* user_thread_connected(void *p)
 
         }
         sleep(0.1);
+        break;
     }
 
     
@@ -833,6 +869,8 @@ void getports(vector<int>&ports,string result)
     // Traverse through all words
     // while loop till we get 
     // strings to store in string word
+    ss>>word;
+    ss>>word;
     while (ss >> word) 
     {
         // print the read word
@@ -917,5 +955,54 @@ int create_file(string path)
     }
 
     return fd2;    
+
+}
+
+void piecewise(vector<pieces>&vec,Download &d)
+{
+    int size = d.size;
+    int n = ceil(size/chunksize);
+
+    d.chunks = n;
+    if(d.port_no.size()>=n)
+    {
+        //assign 1 chunk to each
+        int curr = 0;
+        int i=0;
+        while(n--)
+        {
+            pieces p;
+            p.dindex = d.index;
+            p.chunks = 1;
+            p.offset = curr;
+            p.port_no = d.port_no[i];
+            vec.push_back(p);
+            i++;
+            curr=curr+chunksize;
+        }
+    }
+    else
+    {
+
+        int cns = n/d.port_no.size();
+        int ext = n%d.port_no.size();
+        int curr = 0;
+
+        for(int i=0;i<d.port_no.size();i++)
+        {
+            
+            pieces p;
+            p.dindex = d.index;
+            p.chunks = cns;
+            p.offset = curr;
+            p.port_no = d.port_no[i];
+            vec.push_back(p);
+            curr=curr+(cns*chunksize);
+
+        }
+
+        vec[vec.size()-1].chunks+=ext;
+
+    }
 
 }

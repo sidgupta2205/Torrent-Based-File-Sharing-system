@@ -460,7 +460,9 @@ void* user_thread(void *p)
                     }
                     else
                     {
-                        groups[tokens[2]].files[tokens[1]].portno +=" "+port_no;
+                        string sp = " ";
+                        groups[tokens[2]].files[tokens[1]].portno = groups[tokens[2]].files[tokens[1]].portno+sp+to_string(port_no);
+                        cout<<groups[tokens[2]].files[tokens[1]].portno;
                         cout<<"port no added for file"<<endl;
                     }
 

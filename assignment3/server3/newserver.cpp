@@ -1,6 +1,34 @@
 #include "allheaders.h"
-
+#define chunksize 524288
 using namespace std;
+
+struct pieces
+{
+    int dindex;
+    int chunks;
+    int offset;
+    int port_no;
+};
+
+struct Download
+{
+    Download(string filename,vector<int> port, int chunkns,int i,string si)
+    {
+        port_no = port;
+        file_name = filename;
+        chunks = chunkns;
+        completed = 0;
+        index = i;
+        size = strtol(si.c_str(),NULL,10);
+    }
+    vector<int> port_no;
+    int fd;
+    int chunks;
+    int completed;
+    int index;
+    int size;
+    string file_name;
+};
 
 int serverSocket, newSocket;
 //tracker_socket contains fd for connection with tracker
@@ -15,6 +43,9 @@ int ithr=0;
 map<string,bool> seeded;
 // Server
 map<string,string> fsizes;
+//storing downloading files struct
+vector<Download> Downloads;
+vector<Download> Completed;
 
 void* receiving_thread(void*);
 void* receiving_tracker(void*);
@@ -24,8 +55,12 @@ string getfilesize(string);
 void getports(vector<int>&ports,string result);
 void gettokens(vector<string>&,string);
 void printall(vector<string>,int);
+void piecewise(vector<pieces>&,Download&);
 void copy_string(string &a,string b);
+int create_file(string);
 string getfilename(string);
+string dest_file;
+string src_file;
 bool checkfile(string);
 
 //- Bind to a address
@@ -140,6 +175,13 @@ int main(int argc, char *argv[])
                 
             }
             
+        }
+
+        else if(tokens[0]=="logout")
+        {
+            cout<<"logout initiated"<<endl;
+            send(tracker_socket,cmd.c_str(),cmd.size(),0);
+
         }
 
         else if(tokens[0]=="login")
@@ -258,6 +300,9 @@ int main(int argc, char *argv[])
                 continue;
             }
 
+            src_file = tokens[2];
+            dest_file = tokens[3];
+            cout<<src_file<<" "<<dest_file<<endl;
             send(tracker_socket,cmd.c_str(),cmd.size(),0);
 
             // taking into consideration destination path is always valid
@@ -307,6 +352,7 @@ void* receiving_tracker(void *p)
 {
     char buffer[1024];
     char message[1024];
+    string file_name;
     while(1)
     {
         memset(buffer, 0, 1024);
@@ -345,8 +391,8 @@ void* receiving_tracker(void *p)
                 //int anss = strtol(result.c_str(),NULL,10);
                 vector<int> ports;
                 getports(ports,result);
-                string anss = to_string(ports[0]);
-                pthread_create(&rthreads[ithr++],NULL,user_thread,&anss);
+                
+                pthread_create(&rthreads[ithr++],NULL,user_thread,&ports[0]);
             }
 
         }
@@ -430,6 +476,10 @@ void* receiving_tracker(void *p)
         {
             cout<<"File not found on the server end"<<endl;
         }
+        else if(cmd=="user logged out success")
+        {
+            cout<<"User is logged out successfully"<<endl;
+        }
 
         else
         {
@@ -463,10 +513,39 @@ void* receiving_tracker(void *p)
                 string port_nos = tokens[2];
                 cout<<size<<" "<<port_nos<<endl;
                 vector<int> ports;
-                getports(ports,port_nos);
+                getports(ports,cmd);
                 string anss = to_string(ports[0]);
                 cout<<"asking for file with port "<<anss<<endl;
-                //pthread_create(&rthreads[ithr++],NULL,user_thread,&anss);
+                // fill download dsa
+                Download d(src_file,ports,1,Downloads.size(),size);
+                //create dest file and add fd
+                d.fd = create_file(dest_file);
+                if(d.fd<0)
+                {
+                    cout<<"Unable to Download file"<<endl;
+                }
+                else
+                {
+                    
+
+                    cout<<d.file_name<<d.size<<endl;
+                    // divide in chunks
+                    //currently 1
+                // distribute in threads
+                                // entry in downloads
+                    vector<pieces> vec;
+                    piecewise(vec,d);
+                    Downloads.push_back(d);
+                    cout<<vec.size()<<endl;
+                    for(pieces p:vec)
+                    {
+                        cout<<"trying to connect with "<<p.port_no<<endl;
+                        pthread_create(&rthreads[ithr++],NULL,user_thread,&p);
+                        sleep(3);
+                    }
+                        
+                }
+                
             }
             
         }
@@ -481,8 +560,18 @@ void* receiving_tracker(void *p)
 //thread for a new user 
 void* user_thread(void *p)
 {
+    pieces *pie = (pieces*)p;
+    Download *ptr = &Downloads[pie->dindex];
 
-    int port = *((int *)p);
+    // connect with user
+    // ask for chunk of file
+    // write in fd
+    // check if download is completed
+    // if no increment completed with lock
+    // if yes move from downloads to src
+    // add port no in downloading
+
+    int port = pie->port_no;
     cout<<"connecting at port "<<port<<endl;
     int user_socket = socket(AF_INET,SOCK_STREAM, 0);
     // Initialise port number and address
@@ -506,11 +595,11 @@ void* user_thread(void *p)
 
     sleep(0.1);
     // send download file cmd
-    string cmd="download_file";
+    string cmd="downloads_file";
+    //string cmd="download_file";
+
     
 
-            
-            
     if(cmd=="download_file")
     {
         cout<<"sending download cmd to user"<<endl;
@@ -554,12 +643,14 @@ void* user_thread(void *p)
                 }
                 
 
-                
+                int t = 0;
                 while(size>0)
                 {
+                    
+                    
                     n=read(user_socket,buf,1024);
                     // copy contents in the file
-                    if(write(fd2,buf,n)!=n)
+                    if(pwrite(fd2,buf,n,t)!=n)
                     {
                         //cout<<strerror(errno);
                         cout<<"error"<<endl;
@@ -567,6 +658,7 @@ void* user_thread(void *p)
                     }
                     // reduce size 
                     size = size-n;
+                    t = t+n;
                     cout<<size<<endl;
                 }
 
@@ -582,9 +674,52 @@ void* user_thread(void *p)
             sleep(0.1);
 
         }
+    }
 
-        
-    
+    else if(cmd=="downloads_file")
+    {
+        string file_name = ptr->file_name;
+        string res = "downloads_file "+file_name+" "+to_string(pie->chunks)+" "+to_string(pie->offset);
+        cout<<res<<endl;
+        send(user_socket,res.c_str(),res.size(),0);
+        char message[1024];
+        memset(message,0,1024);
+        read(user_socket,message,1024);
+        string sized = string(message);
+        if(sized=="sending")
+        {   
+            //change as per chunksize
+            int csg = (pie->chunks)*chunksize;
+            int n;
+            char buf[chunksize];
+            int fd2 = ptr->fd;
+            int t = pie->offset;
+            while(csg>0)
+            {
+                n=read(user_socket,buf,chunksize);
+                // copy contents in the file
+                if(pwrite(fd2,buf,n,t)!=n)
+                {
+                    //cout<<strerror(errno);
+                    cout<<"error"<<endl;
+                    break;
+                }
+                // reduce size 
+                csg = csg-n;
+                t = t+n;
+                cout<<csg<<endl;
+            }
+
+                cout<<"copy success"<<endl;
+
+            // remove from downloading and push in completed 
+            // 
+        }
+        else
+        {
+            cout<<"Downloading cannot be Completed"<<endl;
+            //remove from Download dsa
+        }
     }
     pthread_exit(NULL);
 }
@@ -602,6 +737,9 @@ string getfilesize(string filename)
 void* user_thread_connected(void *p)
 {
 
+    // check if that file chunk is present or not
+    // if present send that chunk
+    // 
     int fd = *((int *)p);
     char buffer[1024];
     char message[1024];
@@ -615,7 +753,9 @@ void* user_thread_connected(void *p)
         read(fd,cmd,1024);
 
         string cmds = string(cmd);
-
+        vector<string>token;
+        gettokens(token,cmds);
+        cout<<cmds<<endl;
         if(cmds=="download_file")
         {
             cout<<"download_file received";
@@ -653,7 +793,7 @@ void* user_thread_connected(void *p)
                             char buf[1024];
                             int n;
                             int curr=0;
-                            while((n=read(fd1,buf,1024))>0)
+                            while((n=pread(fd1,buf,1024,curr))>0)
                             {
                                 send(fd, &buf,1024, 0);
                                 curr = curr+n;
@@ -668,7 +808,7 @@ void* user_thread_connected(void *p)
                 
                            
             }
-            else
+            else if(token[0]=="")
             {
                 cout<<"file not seeded by this user"<<endl;
                 string res="-1";
@@ -676,7 +816,42 @@ void* user_thread_connected(void *p)
             }
         }
 
+        else if(token[0]=="downloads_file")
+        {
+            string file_name = token[1];
+            int chunks = strtol(token[2].c_str(),NULL,10);
+            cout<<"chance of segfault"<<endl;
+            int offset = strtol(token[3].c_str(),NULL,10);
+
+            if(checkfile(file_name))
+            {
+                string res="sending";
+                cout<<"Preparing to send file"<<endl;
+                send(fd,res.c_str(),sizeof(res),0);
+
+                int fd1=open(file_name.c_str(),O_RDWR);
+
+                char buf[chunksize];
+                int n;
+                int curr=offset;
+                while(chunks-- and (n=pread(fd1,buf,chunksize,curr))>0)
+                {
+                    send(fd, &buf,chunksize, 0);
+                    curr = curr+n;
+                    cout<<curr<<endl;
+                }
+            }
+            else
+            {
+                string res="sending failed";
+                cout<<"aborting to send file as file not present"<<endl;
+                send(fd,res.c_str(),sizeof(res),0);
+
+            }
+
+        }
         sleep(0.1);
+        break;
     }
 
     
@@ -694,6 +869,8 @@ void getports(vector<int>&ports,string result)
     // Traverse through all words
     // while loop till we get 
     // strings to store in string word
+    ss>>word;
+    ss>>word;
     while (ss >> word) 
     {
         // print the read word
@@ -764,4 +941,68 @@ string getfilename(string path)
 
     string file = path.substr(botDirPos+1, path.length());
     return file;
+}
+
+int create_file(string path)
+{
+
+    int fd2;
+
+    if ((fd2=open(path.c_str(),O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR))<0)
+    {
+        cout<<"creat error"<<endl;
+        return -1;
+    }
+
+    return fd2;    
+
+}
+
+void piecewise(vector<pieces>&vec,Download &d)
+{
+    int size = d.size;
+    int n = ceil(size/chunksize);
+
+    d.chunks = n;
+    if(d.port_no.size()>=n)
+    {
+        //assign 1 chunk to each
+        int curr = 0;
+        int i=0;
+        while(n--)
+        {
+            pieces p;
+            p.dindex = d.index;
+            p.chunks = 1;
+            p.offset = curr;
+            p.port_no = d.port_no[i];
+            vec.push_back(p);
+            i++;
+            curr=curr+chunksize;
+        }
+    }
+    else
+    {
+
+        int cns = n/d.port_no.size();
+        int ext = n%d.port_no.size();
+        int curr = 0;
+
+        for(int i=0;i<d.port_no.size();i++)
+        {
+            
+            pieces p;
+            p.dindex = d.index;
+            p.chunks = cns;
+            p.offset = curr;
+            p.port_no = d.port_no[i];
+            vec.push_back(p);
+            curr=curr+(cns*chunksize);
+
+        }
+
+        vec[vec.size()-1].chunks+=ext;
+
+    }
+
 }
